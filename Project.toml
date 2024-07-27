@@ -1,4 +1,4 @@
-name = "CUFSM"
+name = "AutoCUFSM"
 uuid = "4d107490-34d6-4bd6-ab03-59e08d7e12cd"
 authors = ["Damir Akchurin <AkchurinDA@gmail.com>"]
 version = "0.1.0"
