@@ -4,6 +4,4 @@ module CUFSM
 # --------------------------------------------------
 import LinearAlgebra
 import StaticArrays
-
-
 end
