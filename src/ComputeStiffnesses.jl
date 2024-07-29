@@ -42,7 +42,8 @@ function compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::StaticArray
             @inbounds k_e_1[4, 2] = k_e_1[2, 4]
             @inbounds k_e_1[4, 3] = +(E_22 * v_xx     * I_2) / (2     * c_1      ) + (G_xy *     I_5) / (2     * c_1      )
             @inbounds k_e_1[4, 4] = k_e_1[2, 2]
-            k_e_1       = t * k_e_1
+
+            k_e_1 = t * k_e_1
 
             # Define the flexural elastic stiffness matrix:
             @inbounds k_e_2[1, 1] = (+5040         * D_xx * I_1 - 504 * b ^ 2 * D_11 * I_2 - 504 * b ^ 2 * D_11 * I_3 + 156 * b ^ 4 * D_yy * I_4 + 2016 * b ^ 2 * D_xy * I_5) / (420 * b ^ 3)
@@ -78,10 +79,10 @@ function compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::StaticArray
     return k_e
 end
 
-compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::AbstractVector{<:Integer}      ) = 
+compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy,       M::AbstractVector{<:Integer}) = 
 compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, StaticArrays.SVector{length(M)}(M))
 
-function compute_local_k_g(a, b, T_i, T_j, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT}
+function compute_local_k_g(a, b, t, T_i, T_j, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT}
     # Preallocate the local geometric stiffness matrix:
     k_g = zeros(8 * NLT, 8 * NLT)
 
@@ -141,18 +142,15 @@ function compute_local_k_g(a, b, T_i, T_j, M::StaticArrays.SVector{NLT, <:Intege
     return k_g
 end
 
-compute_local_k_g(a, b, T_i, T_j, M::AbstractVector{<:Integer}      ) = 
+compute_local_k_g(a, b, T_i, T_j,       M::AbstractVector{<:Integer}) = 
 compute_local_k_g(a, b, T_i, T_j, StaticArrays.SVector{length(M)}(M))
 
-function assemble_global_K_e(section::Section{NN, NE, NM}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NM, NLT}
-    # Extract the section's information:
-    elements = section.elements
-
+function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Element), b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global elastic stiffness matrix:
     K_e = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global elastic stiffness matrix:
-    skip = 2*NN
+    skip = 2 * NN
     for element in elements
         # Extract the element information:
         a = element.a
@@ -205,15 +203,12 @@ function assemble_global_K_e(section::Section{NN, NE, NM}, b::Real, M::StaticArr
     return K_e
 end
 
-function assemble_global_K_g(section::Section{NN, NE, NM}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NM, NLT}
-    # Extract the section's information:
-    elements = section.elements
-
+function assemble_global_K_g(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Element), b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global geometric stiffness matrix:
     K_g = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global geometric stiffness matrix:
-    skip = 2*NN
+    skip = 2 * NN
     for element in elements
         # Extract the element information:
         a = element.a

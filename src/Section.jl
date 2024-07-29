@@ -71,9 +71,9 @@ end
 # --------------------------------------------------
 # SECTION
 # --------------------------------------------------
-struct Section{NN,NE,NM}
-    nodes           ::StaticArrays.SVector{NN, Node    }
-    elements        ::StaticArrays.SVector{NE, Element }
+struct Section{NN, NE, NM}
+    nodes           ::StaticArrays.SVector{NN,     Node}
+    elements        ::StaticArrays.SVector{NE,  Element}
     materials       ::StaticArrays.SVector{NM, Material}
 
     function Section(nodes::StaticArrays.SVector{NN, <:Node}, elements::StaticArrays.SVector{NE, <:Element}, materials::StaticArrays.SVector{NM, <:Material}) where {NN,NE,NM}
@@ -82,8 +82,8 @@ struct Section{NN,NE,NM}
 end
 
 function Section(nodes::AbstractVector{<:Node}, elements::AbstractVector{<:Element}, materials::AbstractVector{<:Material})
-    NN = length(nodes    )
-    NE = length(elements )
+    NN = length(    nodes)
+    NE = length( elements)
     NM = length(materials)
 
     return Section(
