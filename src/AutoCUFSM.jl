@@ -14,7 +14,7 @@ import StaticArrays
 # EXPORT TYPES AND FUNCTIONS
 # --------------------------------------------------
 include("Section.jl")
-export Section, Node, Element, Material
+export Material, Node, Element, Section
 include("ComputeGeometricProperties.jl")
 include("ComputeStiffnesses.jl")
 export compute_local_k_e, assemble_global_K_e
