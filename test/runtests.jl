@@ -62,11 +62,4 @@ using Test
         @test isapprox(section.I_zz,  7.500000, atol = 1E-6)
         @test isapprox(section.I_xz,  0.000000, atol = 1E-6)
     end
-
-    # Test the section stiffnesses:
-    @testset "Section stiffnesses" begin
-        default_section_stiffnesses = matread("default_section.mat")
-        benchmark_K_e = default_section_stiffnesses["K_e"]
-        benchmark_K_g = default_section_stiffnesses["K_g"]
-    end
 end

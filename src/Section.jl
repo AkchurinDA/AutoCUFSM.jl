@@ -33,58 +33,77 @@ end
 # --------------------------------------------------
 # ELEMENT
 # --------------------------------------------------
-struct Element{CoordinateType<:Real, MaterialPropertyType<:Real, ElementPropertyType<:Real}
-    node_i          ::Node{CoordinateType}
-    node_j          ::Node{CoordinateType}
+struct Element{CoordinateType<:Real, StressType<:Real, MaterialPropertyType<:Real}
+    node_i          ::Node{CoordinateType, StressType}
+    node_j          ::Node{CoordinateType, StressType}
+    node_i_ID       ::Integer
+    node_j_ID       ::Integer
     material        ::Material{MaterialPropertyType}
-    t               ::ElementPropertyType
-    Δx              ::ElementPropertyType
-    Δz              ::ElementPropertyType
-    w               ::ElementPropertyType
-    θ               ::ElementPropertyType
-    A               ::ElementPropertyType
-    x_c             ::ElementPropertyType
-    z_c             ::ElementPropertyType
+    material_ID     ::Integer
+    t    
+    Δx   
+    Δz   
+    w    
+    θ    
+    A    
+    x_c  
+    z_c  
 
-    function Element(node_i::Node{CoordinateType}, node_j::Node{CoordinateType}, material::Material{MaterialPropertyType}, t::Real) where {CoordinateType<:Real, MaterialPropertyType<:Real}
+    function Element(
+        node_i::Node{CoordinateType, StressType}, node_j::Node{CoordinateType, StressType}, node_i_ID::Integer, node_j_ID::Integer,
+        material::Material{MaterialPropertyType}, material_ID::Integer,
+        t::Real) where {CoordinateType<:Real, StressType<:Real, MaterialPropertyType<:Real}
         element_properties = compute_element_properties(node_i, node_j, t)
         element_properties = promote(t, element_properties...)
 
-        new{CoordinateType, MaterialPropertyType, eltype(element_properties)}(node_i, node_j, material, element_properties...)
+        new{CoordinateType, StressType, MaterialPropertyType}(node_i, node_j, node_i_ID, node_j_ID, material, material_ID, element_properties...)
     end
 end
 
-function Element(node_i::Node{<:Real}, node_j::Node{<:Real}, material::Material, t::Real)
+function Element(
+    nodes, node_i_ID::Integer, node_j_ID::Integer, 
+    materials, material_ID::Integer, 
+    t::Real)
+    node_i = nodes[node_i_ID]
+    node_j = nodes[node_j_ID]
+
     x_i, z_i = node_i.x, node_i.z
     x_j, z_j = node_j.x, node_j.z
 
     nodal_coordinates = promote(x_i, z_i, x_j, z_j)
 
-    updated_node_i = Node(nodal_coordinates[1:2]..., node_i.σ)
-    updated_node_j = Node(nodal_coordinates[3:4]..., node_j.σ)
+    σ_i = node_i.σ
+    σ_j = node_j.σ
 
-    return Element(updated_node_i, updated_node_j, material, t)
+    stresses = promote(σ_i, σ_j)
+
+    updated_node_i = Node(nodal_coordinates[1:2]..., stresses[1])
+    updated_node_j = Node(nodal_coordinates[3:4]..., stresses[2])
+
+    material = materials[material_ID]
+
+    return Element(updated_node_i, updated_node_j, node_i_ID, node_j_ID, material, material_ID, t)
 end
 
 # --------------------------------------------------
 # SECTION
 # --------------------------------------------------
-struct Section{NN, NE, NM, SectionPropertyType<:Real}
+struct Section{NN, NE, NM}
     materials       ::StaticArrays.SVector{NM, Material}
     nodes           ::StaticArrays.SVector{NN, Node}
     elements        ::StaticArrays.SVector{NE, Element}
-    A               ::SectionPropertyType
-    x_c             ::SectionPropertyType
-    z_c             ::SectionPropertyType
-    I_xx            ::SectionPropertyType
-    I_zz            ::SectionPropertyType
-    I_xz            ::SectionPropertyType
+    A               
+    x_c             
+    z_c             
+    I_xx            
+    I_zz            
+    I_xz            
 
     function Section(materials::StaticArrays.SVector{NM, <:Material}, nodes::StaticArrays.SVector{NN, <:Node}, elements::StaticArrays.SVector{NE, <:Element}) where {NM, NN, NE}
         section_properties = compute_section_properties(nodes, elements)
         section_properties = promote(section_properties...)
 
-        return new{NN, NE, NM, eltype(section_properties)}(materials, nodes, elements, section_properties...)
+        return new{NN, NE, NM}(materials, nodes, elements, section_properties...)
     end
 end
 
