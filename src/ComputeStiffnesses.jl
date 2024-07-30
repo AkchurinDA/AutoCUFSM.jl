@@ -148,14 +148,14 @@ end
 
 compute_local_k_g(a, b, T_i, T_j, M::AbstractVector{<:Integer}) = compute_local_k_g(a, b, T_i, T_j, StaticArrays.SVector{length(M)}(M))
 
-function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
+function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, a::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global elastic stiffness matrix:
     K_e = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global elastic stiffness matrix:
     for element in elements
         # Extract the element information:
-        a = element.a
+        b = element.w
         t = element.t
 
         # Extract the node information:
@@ -205,14 +205,14 @@ function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE, Eleme
     return K_e
 end
 
-function assemble_global_K_g(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
+function assemble_global_K_g(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, a::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global geometric stiffness matrix:
     K_g = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global geometric stiffness matrix:
     for element in elements
         # Extract the element information:
-        a = element.a
+        b = element.w
         t = element.t
 
         # Extract the node information:
