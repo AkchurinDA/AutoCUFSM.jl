@@ -10,7 +10,7 @@ function compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::StaticArray
     D_11 = (E_yy * v_xx * t ^ 3) / (12 * (1 - v_xx * v_yy))
     D_xy = (G_xy * t ^ 3) / 12
 
-    # Compute the membrane and flexural elastic stiffness matrices:
+    # Compute the local elastic stiffness matrix:
     for m_i in M
         for m_j in M
             # Preallocate:
@@ -79,13 +79,17 @@ function compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::StaticArray
     return k_e
 end
 
-compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy,       M::AbstractVector{<:Integer}) = 
-compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, StaticArrays.SVector{length(M)}(M))
+compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, M::AbstractVector{<:Integer}) = compute_local_k_e(a, b, t, E_xx, E_yy, v_xx, v_yy, G_xy, StaticArrays.SVector{length(M)}(M))
 
-function compute_local_k_g(a, b, t, T_i, T_j, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT}
+function compute_local_k_g(a, b, t, σ_i, σ_j, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT}
     # Preallocate the local geometric stiffness matrix:
     k_g = zeros(8 * NLT, 8 * NLT)
 
+    # Convert stresses to line loads:
+    T_i = σ_i * t
+    T_j = σ_j * t
+
+    # Assemble the local geometric stiffness matrix:
     for m_i in M
         for m_j in M
             # Preallocate:
@@ -142,15 +146,13 @@ function compute_local_k_g(a, b, t, T_i, T_j, M::StaticArrays.SVector{NLT, <:Int
     return k_g
 end
 
-compute_local_k_g(a, b, T_i, T_j,       M::AbstractVector{<:Integer}) = 
-compute_local_k_g(a, b, T_i, T_j, StaticArrays.SVector{length(M)}(M))
+compute_local_k_g(a, b, T_i, T_j, M::AbstractVector{<:Integer}) = compute_local_k_g(a, b, T_i, T_j, StaticArrays.SVector{length(M)}(M))
 
-function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Element), b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
+function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global elastic stiffness matrix:
     K_e = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global elastic stiffness matrix:
-    skip = 2 * NN
     for element in elements
         # Extract the element information:
         a = element.a
@@ -176,22 +178,22 @@ function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Ele
         # Assemble the global elastic stiffness matrix:
         for i in 1:NLT
             for j in 1:NLT
-                @inbounds K_e[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_e[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_e[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
             end
         end
     end
@@ -203,46 +205,46 @@ function assemble_global_K_e(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Ele
     return K_e
 end
 
-function assemble_global_K_g(::Val{NN}, elements::StaticArrays.SVector{NE}(<:Element), b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
+function assemble_global_K_g(::Val{NN}, elements::StaticArrays.SVector{NE, Element}, b::Real, M::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{4 * NN * NLT, 4 * NN * NLT} where {NN, NE, NLT}
     # Preallocate the global geometric stiffness matrix:
     K_g = zeros(4 * NN * NLT, 4 * NN * NLT)
 
     # Assemble the global geometric stiffness matrix:
-    skip = 2 * NN
     for element in elements
         # Extract the element information:
         a = element.a
+        t = element.t
 
         # Extract the node information:
         node_i    = element.node_i
         node_j    = element.node_j
         node_i_ID = node_i.ID
         node_j_ID = node_j.ID
-        T_i       = node_i.T
-        T_j       = node_j.T
+        σ_i       = node_i.σ
+        σ_j       = node_j.σ
 
         # Compute the local geometric stiffness matrix:
-        k_g = compute_local_k_g(a, b, T_i, T_j, M)
+        k_g = compute_local_k_g(a, b, t, σ_i, σ_j, M)
 
         # Assemble the global geometric stiffness matrix:
         for i in 1:NLT
             for j in 1:NLT
-                @inbounds K_g[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_i_ID * 2 - 1):(4 * NN * (i - 1)        + node_i_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_i_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_g[(4 * NN * (i - 1)        + node_j_ID * 2 - 1):(4 * NN * (i - 1)        + node_j_ID * 2), (4 * NN * (j - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (j - 1) + skip + node_j_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_i_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_i_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1)        + node_i_ID * 2 - 1):(4 * NN * (j - 1)        + node_i_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds K_g[(4 * NN * (i - 1) + skip + node_j_ID * 2 - 1):(4 * NN * (i - 1) + skip + node_j_ID * 2), (4 * NN * (j - 1)        + node_j_ID * 2 - 1):(4 * NN * (j - 1)        + node_j_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
             end
         end
     end

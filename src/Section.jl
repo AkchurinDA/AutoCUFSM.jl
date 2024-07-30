@@ -23,12 +23,12 @@ struct Node{CoordinateType<:Real}
     ID              ::Integer
     x               ::CoordinateType
     z               ::CoordinateType
-    T               ::Real
+    σ               ::Real
 
-    function Node(ID::Integer, x::Real, z::Real, T::Real)
+    function Node(ID::Integer, x::Real, z::Real, σ::Real)
         nodal_coordinates = promote(x, z)
 
-        return new{eltype(nodal_coordinates)}(ID, nodal_coordinates..., T)
+        return new{eltype(nodal_coordinates)}(ID, nodal_coordinates..., σ)
     end
 end
 
@@ -42,17 +42,13 @@ struct Element{CoordinateType<:Real, MaterialPropertyType<:Real}
     material        ::Material{MaterialPropertyType}
     t               ::Real
     a
+    A
     θ
 
-    function Element(ID::Integer, node_i::Node{T}, node_j::Node{T}, material::Material{S}, t::Real) where {T<:Real, S<:Real}
-        x_i, z_i = node_i.x, node_i.z
-        x_j, z_j = node_j.x, node_j.z
-        dx = x_j - x_i
-        dz = z_j - z_i
-        a = sqrt(dx ^ 2 + dz ^ 2)
-        θ = atan(dz, dx)
+    function Element(ID::Integer, node_i::Node{CoordinateType}, node_j::Node{CoordinateType}, material::Material{MaterialPropertyType}, t::Real) where {CoordinateType<:Real, MaterialPropertyType<:Real}
+        a, A, θ = compute_element_properties(node_i, node_j, t)
 
-        new{T, S}(ID, node_i, node_j, material, t, a, θ)
+        new{T, S}(ID, node_i, node_j, material, t, a, A, θ)
     end
 end
 
@@ -76,18 +72,9 @@ struct Section{NN, NE, NM}
     elements        ::StaticArrays.SVector{NE,  Element}
     materials       ::StaticArrays.SVector{NM, Material}
 
-    function Section(nodes::StaticArrays.SVector{NN, <:Node}, elements::StaticArrays.SVector{NE, <:Element}, materials::StaticArrays.SVector{NM, <:Material}) where {NN,NE,NM}
-        return new{NN,NE,NM}(nodes, elements, materials)
+    function Section(nodes::StaticArrays.SVector{NN, Node}, elements::StaticArrays.SVector{NE, Element}, materials::StaticArrays.SVector{NM, Material}) where {NN, NE, NM}
+        return new{NN, NE, NM}(nodes, elements, materials)
     end
 end
 
-function Section(nodes::AbstractVector{<:Node}, elements::AbstractVector{<:Element}, materials::AbstractVector{<:Material})
-    NN = length(    nodes)
-    NE = length( elements)
-    NM = length(materials)
-
-    return Section(
-        StaticArrays.SVector{NN}(nodes    ),
-        StaticArrays.SVector{NE}(elements ),
-        StaticArrays.SVector{NM}(materials))
-end
+Section(nodes::AbstractVector{Node}, elements::AbstractVector{Element}, materials::AbstractVector{Material}) = Section(StaticArrays.SVector{length(nodes)}(nodes), StaticArrays.SVector{length(elements)}( elements), StaticArrays.SVector{length(materials)}(materials))
