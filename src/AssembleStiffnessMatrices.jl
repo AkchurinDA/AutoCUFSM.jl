@@ -7,12 +7,12 @@ function compute_k_e_local(
     v_xx::MaterialPropertyType,
     v_yy::MaterialPropertyType,
     G_xy::MaterialPropertyType,
-    M   ::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType} where {
+    M   ::StaticArrays.SVector{NLT, <:Integer})::SparseArrays.SparseMatrixCSC{GeometricPropertyType} where {
         GeometricPropertyType   <: Real, 
         MaterialPropertyType    <: Real, 
         NLT}
     # Preallocate the local elastic stiffness matrix:
-    k_e = zeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
+    k_e = SparseArrays.spzeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
 
     # Compute element's rigidities:
     E_11 = E_xx / (1 - v_xx * v_yy)
@@ -77,8 +77,8 @@ function compute_k_e_local(
         end
     end
 
-    # Convert to a static matrix:
-    k_e = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_e)
+    # # Convert to a static matrix:
+    # k_e = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_e)
 
     # Return the result:
     return k_e
@@ -90,12 +90,12 @@ function compute_k_g_local(
     t   ::GeometricPropertyType, 
     σ_i ::StressType, 
     σ_j ::StressType, 
-    M   ::StaticArrays.SVector{NLT, <:Integer})::StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType} where {
+    M   ::StaticArrays.SVector{NLT, <:Integer})::SparseArrays.SparseMatrixCSC{GeometricPropertyType} where {
         GeometricPropertyType   <: Real,
         StressType              <: Real,
         NLT}
     # Preallocate the local geometric stiffness matrix:
-    k_g = zeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
+    k_g = SparseArrays.spzeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
 
     # Convert stresses to line loads:
     T_i = σ_i * t
@@ -147,8 +147,8 @@ function compute_k_g_local(
         end
     end
 
-    # Convert to a static matrix:
-    k_g = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_g)
+    # # Convert to a static matrix:
+    # k_g = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_g)
 
     # Return the result:
     return k_g
@@ -183,45 +183,28 @@ function assemble_K_e_global_sparse(::Val{NN},
         # Compute the local elastic stiffness matrix:
         geometric_properties = promote(a, b, t, θ)
         k_e_local  = compute_k_e_local(geometric_properties[1:3]..., E_xx, E_yy, v_xx, v_yy, G_xy, M)
-        k_e_global = _transform_k_e_from_local_to_global(Val(NLT), k_e_local, geometric_properties[4])
+        k_e_global = _transform_k_from_local_to_global(Val(NLT), k_e_local, geometric_properties[4])
 
         # Assemble the global elastic stiffness matrix:
         K_e_temp = SparseArrays.spzeros(4 * NN * NLT, 4 * NN * NLT)
         for i in 1:NLT
             for j in 1:NLT
-                @inbounds k_11 = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_12 = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_13 = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_14 = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_21 = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_22 = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_23 = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_24 = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_31 = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_32 = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_33 = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_34 = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_41 = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_42 = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_43 = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_44 = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_11
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_12
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_21
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_22
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_33
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_34
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_43
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_44
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_13
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_14
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_23
-                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_24
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_31
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_32
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_41
-                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_42
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_e_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_e_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_e_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
             end
         end
 
@@ -255,45 +238,28 @@ function assemble_K_g_global_sparse(::Val{NN},
         # Compute the element geometric stiffness matrix:
         geometric_properties = promote(a, b, t, θ)
         k_g_local  = compute_k_g_local(geometric_properties[1:3]..., σ_i, σ_j, M)
-        k_g_global = _transform_k_g_from_local_to_global(Val(NLT), k_g_local, geometric_properties[4])
+        k_g_global = _transform_k_from_local_to_global(Val(NLT), k_g_local, geometric_properties[4])
 
         # Assemble the global geometric stiffness matrix:
         K_g_temp = SparseArrays.spzeros(4 * NN * NLT, 4 * NN * NLT)
         for i in 1:NLT
             for j in 1:NLT
-                @inbounds k_11 = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_12 = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_13 = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_14 = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_21 = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_22 = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_23 = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_24 = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_31 = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_32 = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_33 = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_34 = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-                @inbounds k_41 = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
-                @inbounds k_42 = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
-                @inbounds k_43 = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
-                @inbounds k_44 = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
-
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_11
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_12
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_21
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_22
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_33
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_34
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_43
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_44
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_13
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_14
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_23
-                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_24
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_31
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_32
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_41
-                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_42
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_i_ID * 2 - 1):(4 * NN * (i - 1)          + node_i_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 1):(8 * (i - 1) + 2), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 5):(8 * (j - 1) + 6)]
+                @inbounds K_g_temp[(4 * NN * (i - 1)          + node_j_ID * 2 - 1):(4 * NN * (i - 1)          + node_j_ID * 2), (4 * NN * (j - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (j - 1) + 2 * NN + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 3):(8 * (i - 1) + 4), (8 * (j - 1) + 7):(8 * (j - 1) + 8)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_i_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 5):(8 * (i - 1) + 6), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_i_ID * 2 - 1):(4 * NN * (j - 1)          + node_i_ID * 2)] = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 1):(8 * (j - 1) + 2)]
+                @inbounds K_g_temp[(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2 - 1):(4 * NN * (i - 1) + 2 * NN + node_j_ID * 2), (4 * NN * (j - 1)          + node_j_ID * 2 - 1):(4 * NN * (j - 1)          + node_j_ID * 2)] = k_g_global[(8 * (i - 1) + 7):(8 * (i - 1) + 8), (8 * (j - 1) + 3):(8 * (j - 1) + 4)]
             end
         end
         
@@ -322,7 +288,7 @@ function _compute_undetermined_coefficients(a::T, m_i::Integer, m_j::Integer)::N
     return I_1, I_2, I_3, I_4, I_5
 end
 
-function _transform_k_e_from_local_to_global(::Val{NLT}, k_e_local::StaticArrays.SMatrix, θ::GeometricPropertyType)::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT, GeometricPropertyType <: Real}
+function _transform_k_from_local_to_global(::Val{NLT}, k_global::SparseArrays.SparseMatrixCSC{GeometricPropertyType, <:Integer}, θ::GeometricPropertyType)::SparseArrays.SparseMatrixCSC{GeometricPropertyType, <:Integer} where {NLT, GeometricPropertyType <: Real}
     r = SparseArrays.spzeros(GeometricPropertyType, 8, 8)
     r[1, 1] = +cos(θ)
     r[1, 5] = -sin(θ)
@@ -339,39 +305,10 @@ function _transform_k_e_from_local_to_global(::Val{NLT}, k_e_local::StaticArrays
     
     R = SparseArrays.spzeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
     for i in 1:NLT
-        R[8 * (i - 1) + 1:8 * i, 8 * (i - 1) + 1:8 * i] = r
+        @inbounds R[8 * (i - 1) + 1:8 * i, 8 * (i - 1) + 1:8 * i] = r
     end
 
-    k_e_global = LinearAlgebra.transpose(R) * k_e_local * R
+    k_global = R * k_global * LinearAlgebra.transpose(R)
 
-    k_e_global = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_e_global)
-
-    return k_e_global
-end
-
-function _transform_k_g_from_local_to_global(::Val{NLT}, k_g_local::StaticArrays.SMatrix, θ::GeometricPropertyType)::StaticArrays.SMatrix{8 * NLT, 8 * NLT} where {NLT, GeometricPropertyType <: Real}
-    r = SparseArrays.spzeros(GeometricPropertyType, 8, 8)
-    r[1, 1] = +cos(θ)
-    r[1, 5] = -sin(θ)
-    r[2, 2] = 1
-    r[3, 3] = +cos(θ)
-    r[3, 7] = -sin(θ)
-    r[4, 4] = 1
-    r[5, 1] = +sin(θ)
-    r[5, 5] = +cos(θ)
-    r[6, 6] = 1
-    r[7, 3] = +sin(θ)
-    r[7, 7] = +cos(θ)
-    r[8, 8] = 1
-    
-    R = SparseArrays.spzeros(GeometricPropertyType, 8 * NLT, 8 * NLT)
-    for i in 1:NLT
-        R[8 * (i - 1) + 1:8 * i, 8 * (i - 1) + 1:8 * i] = r
-    end
-
-    k_g_global = R * k_g_local * R
-
-    k_g_global = StaticArrays.SMatrix{8 * NLT, 8 * NLT, GeometricPropertyType}(k_g_global)
-
-    return k_g_global
+    return k_global
 end

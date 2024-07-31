@@ -51,13 +51,29 @@ elements = [
 section = Section(materials, nodes, elements)
 
 # Define the lengths:
-L = collect(10 .^ range(0, 3, 100))
+L = collect(10 .^ range(0, 3, 1000))
 
 # Define the number of longitudinal terms:
 M = [1]
 
 # Compute the signature curve:
-Λ, Φ =  solve(section, L, M)
+Λ, Φ = solve(section, L, M)
 
+# Plot the signature curve:
+using CairoMakie, MathTeXEngine
+CairoMakie.activate!(type = :svg)
 
+display_mode = 2
+begin
+    F = Figure()
 
+    A = Axis(F[1, 1],
+        xscale = log10,
+        limits = (L[1], L[end], 0, nothing))
+
+    λ = [Λ[i][display_mode] for i in eachindex(L)]
+
+    lines!(A, L, λ)
+
+    display(F)
+end
